@@ -1,0 +1,8 @@
+data/
+query/
+**/__pycache__/
+node*/
+package*.json
+.mypy*/
+shortest.json
+*.geojson
