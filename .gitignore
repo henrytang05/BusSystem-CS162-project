@@ -6,3 +6,4 @@ package*.json
 .mypy*/
 shortest.json
 *.geojson
+output.json

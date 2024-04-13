@@ -1,7 +1,8 @@
 from src.models.RouteVarQuery import RouteVarQuery
 from src.models.StopQuery import StopQuery
 from src.models.Stop import Stop
-from src.models.Graph import Graph
+
+# from src.models.Graph import Graph
 from src.models.Path import Path
 from src.models.RouteVar import RouteVar
 from src.utils.Cache import Cache
@@ -84,23 +85,17 @@ def test_var_stop_map():
         file.write(str(collection))
 
 
-def test_graph():
-    RouteVar.load_route_var()
+def test_graph2():
+    from src.models.Graph2 import Graph
+
     Stop.load_stop()
     g = Graph()
-    g.find_all_shortest_paths()
-    # g.output_as_json()
-    print("Done")
-    # print(Graph.graph[StopQuery().search(field="StopId", value=7526)[0]])
-    # count = 0
-    # for node, edge in Graph.graph.items():
-    #     count += len(edge)
-
-    # print(count)
+    res = g.find_shortest_path()
+    g.output_as_json(res)
 
 
 def main():
-    test_graph()
+    test_graph2()
 
 
 if __name__ == "__main__":
