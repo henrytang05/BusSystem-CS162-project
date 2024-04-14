@@ -1,120 +1,124 @@
-__all__ = ["Graph"]
-from .Stop import Stop
-from ..utils.Cache import Cache
-from ..utils.json_handler import writer
-from .RouteVar import RouteVar
-
 import heapq
-from ..utils.constants import *
-from pyproj import Proj, CRS, Geod
-from pqdict import pqdict
+
+from ..utils.Cache import Cache
+from ..utils.constants import PATH_LIST, ROUTEVAR_STOP_MAP, STOP_LIST, VAR_LIST
+from ..utils.helpers import calculate_distance
+from .Path import Path
+from pyproj import Geod
 
 
 class Edge:
-    def __init__(
-        self,
-        routevar: tuple[int, int],
-        source: int,
-        destination: int,
-        time: float,
-        distance: float,
-    ):
-        self.routevar = routevar
-        self.source = source
-        self.destination = destination
+    def __init__(self, src: int, dest: int, time: float):
+        self.src = src
+        self.dest = dest
         self.time = time
-        self.distance = distance
+        self.path: list[Path] = []
 
-    def __repr__(self) -> str:
-        return f"Edge:in ( {self.routevar[0]}, {self.routevar[1]} ), From {self.source}, to {self.destination}, {self.time}"
 
-    def __str__(self) -> str:
-        return f"Edge:in ( {self.routevar[0]}, {self.routevar[1]} ), From {self.source}, to {self.destination}, {self.time}"
+def distance_finder(routevar):
+    pf = path_finder(routevar)
+
+    def find_distance(stop1, stop2):
+        stops = Cache.get(STOP_LIST)
+        lng1 = stops[stop1].Lng
+        lat1 = stops[stop1].Lat
+        lng2 = stops[stop2].Lng
+        lat2 = stops[stop2].Lat
+
+        index1: int = pf((lng1, lat1))
+        index2: int = pf((lng2, lat2))
+        path = Cache.get(PATH_LIST)[routevar]
+        assert index1 >= 0 and index1 < len(path.lng_lat_list)
+        assert index2 >= 0 and index2 < len(path.lng_lat_list)
+
+        lngs = path.lngs[index1:index2]
+        lats = path.lats[index1:index2]
+        geo = Geod(ellps="WGS84")
+        return geo.line_length(lngs, lats)
+
+    return find_distance
+
+
+def path_finder(routevar):
+    last_found = 0
+    path = Cache.get(PATH_LIST)[routevar]
+
+    def find(stop: tuple[float, float]) -> int:
+        nonlocal last_found
+        closest_dis = float("inf")
+        for i in range(last_found, len(path.lng_lat_list)):
+            loc = path.lng_lat_list[i]
+            distance = calculate_distance(loc, stop)
+            if distance < closest_dis:
+                last_found = i
+                closest_dis = distance
+        return last_found
+
+    return find
 
 
 class Graph:
-    """A class to represent a Graph object"""
+    def __init__(self):
+        self.vertices: dict[int, list[Edge]] = {}
+        rtm = Cache.get(ROUTEVAR_STOP_MAP)
+        routevar = Cache.get(VAR_LIST)
+        for route, stops in rtm.items():
+            ave_speed = routevar[route].Distance / (60 * routevar[route].RunningTime)
+            prev_stop = stops[0]
+            df = distance_finder(route)
+            for stop in stops[1:]:
+                distance = df(prev_stop, stop)
+                self.add_edge(prev_stop, stop, distance / ave_speed)
+                prev_stop = stop
 
-    graph: dict[int, list[Edge]] = {}
+        for stopid, _ in Cache.get(STOP_LIST).items():
+            if stopid not in self.vertices:
+                self.vertices[stopid] = []
 
-    def __new__(cls):
-        if not cls.graph:
-            crs = CRS.from_epsg(3405)
-            proj = Proj(crs)
+    def add_edge(self, src: int, dest: int, time: float):
+        if src not in self.vertices:
+            self.vertices[src] = []
+        self.vertices[src].append(Edge(src, dest, time))
 
-            for (routeid, varid), stopids in Cache.get(ROUTEVAR_STOP_MAP).items():
-                routevar = Cache.get(VAR_LIST)[(routeid, varid)]
-                average_velocity = routevar.Distance / (60 * routevar.RunningTime)
-                last = Cache.get(STOP_LIST)[stopids[0]]
-                assert len(stopids) > 1
-                for stopid in stopids[1:]:
-                    stop = Cache.get(STOP_LIST)[stopid]
-                    last_x, last_y = proj(last.Lng, last.Lat)
-                    stop_x, stop_y = proj(stop.Lng, stop.Lat)
-                    distance = ((last_x - stop_x) ** 2 + (last_y - stop_y) ** 2) ** (
-                        1 / 2
-                    )
-                    time = distance / average_velocity
-                    if not cls.graph.get(last.StopId):
-                        cls.graph[last.StopId] = []
-                    cls.graph[last.StopId].append(
-                        Edge((routeid, varid), last.StopId, stopid, time, distance)
-                    )
-                    last = stop
+    def Dijkstra(self, start: int) -> dict:
+        cost = {node: float("inf") for node in self.vertices}
+        cost[start] = 0
+        visited = set()
 
-        return super().__new__(cls)
+        pq: list[tuple[float, int]] = [(0, start)]
+        while pq:
+            current_cost, current_node = heapq.heappop(pq)
+            if cost[current_node] < current_cost:
+                continue
+            visited.add(current_node)
+            for edge in self.vertices[current_node]:
+                if edge.dest in visited:
+                    continue
+                new_cost = current_cost + edge.time
+                if new_cost < cost[edge.dest]:
+                    cost[edge.dest] = new_cost
+                    heapq.heappush(pq, (new_cost, edge.dest))
+        return cost
 
-    def dijkstra(self, source, target=None):
-        dist = {}
-        pred = {}
+    def find_shortest_path(self):
+        stops = Cache.get(STOP_LIST)
+        # results = []
+        for stop in stops:
+            res = self.Dijkstra(stop)
+            # results.append({stop: res})
+            self.output_as_json(res)
+            del res
 
-        pq = pqdict.minpq()
-        for node in self.graph:
-            if node == source:
-                pq[node] = 0
-            else:
-                pq[node] = float("inf")
+        # return results
 
-        for node, min_dist in pq.popitems():
-            dist[node] = min_dist
-            if node == target:
-                break
-
-            for edge in self.graph[node]:
-                if edge.destination in pq:
-                    new_score = dist[node] + edge.time
-                    if new_score < pq[edge.destination]:
-                        pq[edge.destination] = new_score
-                        pred[edge.destination] = node
-
-        return dist, pred
-
-    def find_all_shortest_paths(self):
-        for src in self.graph.keys():
-            if not Cache.get(SHORTEST_PATHS):
-                Cache.add(SHORTEST_PATHS, {})
-            dist, pred = self.dijkstra(src)
-            for to, time in dist.items():
-                if to != src:
-                    Cache.get(SHORTEST_PATHS)[(src, to)] = time
-            self.output_as_json()
-            Cache.remove(SHORTEST_PATHS)
-
-    def output_as_json(self):
-        result = Cache.get(SHORTEST_PATHS)
-        # for (stop, destination), time in result.items():
-        #     print(f"From {stop.StopId} to {destination.StopId} in {time} second")
-        data = [
-            {"From": stop, "To": destination, "Take": time}
-            for (stop, destination), time in result.items()
-        ]
+    def output_as_json(self, result):
         import json
 
-        with open("shortest.json", "w") as file:
-            json.dump(data, file)
-            file.write("\n")
+        with open("output.json", "a") as f:
+            f.write(json.dumps(result, indent=4))
+            f.write("\n")
 
-        # with open("shortest.json", "w") as file:
-        #     for item in data:
-        #         json.dump(item, file)
-        #         file.write("\n")
+    def print_results(self, results: list):
+        for result in results:
+            for src, (des, time) in result.items():
+                print(f"From {src} to {des} {time} seconds")

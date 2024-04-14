@@ -1,15 +1,13 @@
-
 import unittest
 import os
 from src.models.PathQuery import PathQuery
 from src.models.Path import Path
 from src.utils.Cache import Cache
 
+
 class TestPathQuery(unittest.TestCase):
     def setUp(self):
         self.path_query = PathQuery()
-        from src.models.Path import Path
-
 
         lng_lat_list = [(10.0, 20.0), (30.0, 40.0)]
         lats = [20.0, 40.0]
@@ -17,9 +15,14 @@ class TestPathQuery(unittest.TestCase):
         RouteId = 1
         RouteVarId = 1
 
-        self.path = Path(lng_lat_list=lng_lat_list, lats=lats, lngs=lngs, RouteId=RouteId, RouteVarId=RouteVarId)
+        self.path = Path(
+            lng_lat_list=lng_lat_list,
+            lats=lats,
+            lngs=lngs,
+            RouteId=RouteId,
+            RouteVarId=RouteVarId,
+        )
 
-     
         Cache.add("Test Path List", [self.path])
 
     def test_search(self):
@@ -42,6 +45,7 @@ class TestPathQuery(unittest.TestCase):
             os.remove(f"{os.getcwd()}/query/test_output.csv")
         if os.path.exists(f"{os.getcwd()}/query/test_output.json"):
             os.remove(f"{os.getcwd()}/query/test_output.json")
+
 
 if __name__ == "__main__":
     unittest.main()

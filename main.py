@@ -2,6 +2,8 @@ from src.models.RouteVarQuery import RouteVarQuery
 from src.models.StopQuery import StopQuery
 from src.models.Stop import Stop
 
+from src.models.Graph import Graph
+
 # from src.models.Graph import Graph
 from src.models.Path import Path
 from src.models.RouteVar import RouteVar
@@ -86,12 +88,11 @@ def test_var_stop_map():
 
 
 def test_graph2():
-    from src.models.Graph2 import Graph
-
     Stop.load_stop()
+    Path.load_path()
     g = Graph()
-    res = g.find_shortest_path()
-    g.output_as_json(res)
+    g.find_shortest_path()
+    # g.output_as_json(res)
 
 
 def main():

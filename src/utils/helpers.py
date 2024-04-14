@@ -1,7 +1,21 @@
-__all__ = ["ensure_valid_query", "ensure_query_path_exists", "intersection"]
+__all__ = [
+    "ensure_valid_query",
+    "ensure_query_path_exists",
+    "intersection",
+    "calculate_distance",
+]
 import os
+from pyproj import Geod
+
 
 CWD = os.getcwd()
+
+geo = Geod(ellps="WGS84")
+
+
+def calculate_distance(loc1, loc2):
+    lng_lat = list(zip(loc1, loc2))
+    return geo.line_length(lng_lat[0], lng_lat[1])
 
 
 def intersection(*args: list) -> list:

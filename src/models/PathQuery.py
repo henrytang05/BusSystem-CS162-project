@@ -111,14 +111,14 @@ class PathQuery:
 
         precision = 10e-3
         self.result = []
-        if field in ["lats", "lngs"]:
-            for item in Cache.get(PATH_LIST):
+
+        for _, item in Cache.get(PATH_LIST).items():
+            if field in ["lats", "lngs"]:
                 locs = getattr(item, field)
                 for loc in locs:
                     if abs(loc - value) <= precision:
                         self.result.append(item)
-        elif field == "lng_lat_list":
-            for item in Cache.get(PATH_LIST):
+            elif field == "lng_lat_list":
                 for pair in item.lng_lat_list:
                     if (
                         abs(pair[0] - value[0]) <= precision
@@ -126,8 +126,7 @@ class PathQuery:
                     ):
                         self.result.append(item)
 
-        else:
-            for item in Cache.get(PATH_LIST):
+            else:
                 if getattr(item, field) == value:
                     self.result.append(item)
         Cache.get(PATH_SEARCH_RESULTS)[(field, value)] = self.result
