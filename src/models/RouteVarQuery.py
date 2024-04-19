@@ -1,12 +1,13 @@
 __all__ = ["RouteVarQuery"]
-# import pandas as pd
-from ..utils.constants import CWD, VAR_LIST, VAR_SEARCH_RESULT
+import pandas as pd
+from ..utils.constants import CWD
 import csv
-from .RouteVar import RouteVar
-from ..utils.helpers import ensure_query_path_exists, ensure_valid_query
+import functools
+from .RouteVar import RouteVarHandler, Var, Route
+from ..utils.helpers import ensure_query_path_exists
 from ..utils import json_handler
-from ..utils.Cache import Cache
 from typing import Any
+from .Query import Query
 
 
 class RouteVarQuery:
@@ -49,35 +50,36 @@ class RouteVarQuery:
 
     """
 
-    _cache = Cache()
+    _instance = None
 
     def __new__(cls):
-        """load the route var data upon the initilization of the first query"""
-        if not Cache.get(VAR_LIST):
-            RouteVar.load_route_var()
-        return super().__new__(cls)
-
-    def __init__(self):
-        self.result = []
-        self.query = ()
+        if not cls._instance:
+            cls._instance = super().__new__(cls)
+        return cls._instance
 
     @property
-    def query(self) -> tuple:
-        return self._query
-
-    @query.setter
-    def query(self, item: tuple):
-        self._query = item
+    def route_var_list(self) -> dict[int, Route]:
+        if not self._route_var_list:
+            self._route_var_list: dict[int, Route] = RouteVarHandler().get_route_list()
+        return self._route_var_list
 
     @property
-    def result(self) -> list[RouteVar]:
+    def result(self) -> list[Var]:
         return self._result
 
     @result.setter
-    def result(self, value: list):
+    def result(self, value: list[Var]) -> None:
         self._result = value
 
-    @ensure_valid_query(RouteVar)
+    @property
+    def query(self) -> Query:
+        return self._query
+
+    @query.setter
+    def query(self, value: Query) -> None:
+        self._query = value
+
+    @functools.lru_cache(maxsize=None)
     def search(self, field: str, value: Any) -> list:
         """
         Search for the route var objects that meet the query
@@ -102,20 +104,19 @@ class RouteVarQuery:
 
         """
 
-        self.query = (field, value)
-        if not Cache.get(VAR_SEARCH_RESULT):
-            Cache.add(VAR_SEARCH_RESULT, {})
+        self.query = Query(field, value)
 
-        if result := Cache.get(VAR_SEARCH_RESULT).get(self.query):
-            self.result = result
-            return result
+        if not self.query.is_valid("VarData", field):
+            raise ValueError(f"{field} is not a valid field")
 
-        self.result = []
-        for _, item in Cache.get(VAR_LIST).items():
-            if getattr(item, field) == value:
-                self.result.append(item)
+        if field == "RouteId":
+            self.result = list(self.route_var_list[value].get_vars().values())
+        else:
+            for route in self.route_var_list.values():
+                for var in route.vars.values():
+                    if getattr(var.data, field) == value:
+                        self.result.append(var)
 
-        Cache.get(VAR_SEARCH_RESULT)[(field, value)] = self.result
         return self.result
 
     @ensure_query_path_exists
