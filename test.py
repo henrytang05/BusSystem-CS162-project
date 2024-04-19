@@ -1,23 +1,21 @@
 from src.models.Stop import Stop
 from src.models.PathQuery import PathQuery
 from src.utils.Cache import Cache
+from src.models.RouteVarQuery import RouteVarQuery
+from src.utils.helpers import calculate_distance
+
+
+def dis():
+    loc1 = (1, 40)
+    loc2 = (2, 50)
+    distance = calculate_distance(loc1, loc2)
+    print(distance)
 
 
 def main():
-    Stop.load_stop()
-    not_found = []
-    for id, stop in Cache.get("Stop List").items():
-        lat = stop.Lat
-        lng = stop.Lng
-
-        res, wp = PathQuery().search(field="lng_lat_list", value=(lng, lat))
-        if not res:
-            print("Not found", id, wp)
-            not_found.append(id)
-
-        # else:
-        #     print("Found", id)
+    r = RouteVarQuery().search(field="RouteId", value=1)
+    print(r)
 
 
 if __name__ == "__main__":
-    main()
+    dis()

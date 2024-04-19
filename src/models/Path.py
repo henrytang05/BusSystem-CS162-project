@@ -17,7 +17,7 @@ class Path:
     RouteVarId: int
 
     @classmethod
-    def load_path(cls) -> list | None:
+    def load_path(cls) -> dict:
         """Load the from the VAR_FILE file and cache it"""
         if not Cache.get(PATH_LIST):
             path_list: dict[tuple[int, int], Path] = {}

@@ -1,6 +1,5 @@
 __all__ = ["RouteVarQuery"]
-from os import writev
-import pandas as pd
+# import pandas as pd
 from ..utils.constants import CWD, VAR_LIST, VAR_SEARCH_RESULT
 import csv
 from .RouteVar import RouteVar

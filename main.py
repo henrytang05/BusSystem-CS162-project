@@ -8,7 +8,7 @@ from src.models.Graph import Graph
 from src.models.Path import Path
 from src.models.RouteVar import RouteVar
 from src.utils.Cache import Cache
-from src.utils.constants import *
+from src.utils.constants import ROUTEVAR_STOP_MAP, STOP_LIST, VAR_LIST
 from pyproj import Proj
 import geojson
 import colorsys
@@ -56,47 +56,58 @@ def test_geojson():
 
 
 def test_var_stop_map():
-    from src.models.PathQuery import PathQuery
-    from src.models.Stop import Stop
-
+    stops: list = Stop.load_stop()
+    paths = Path.load_path()
     RouteVar.load_route_var()
-    Stop.load_stop()
-    lines = []
-    stops = Cache.get(ROUTEVAR_STOP_MAP)[
-        RouteVarQuery().search(field="RouteNo", value="03")[1]
-    ]
-    num_colors = len(stops)
-    rainbow_colors = generate_rainbow_colors(num_colors)
-    last = stops[0]
-    for index, stop in enumerate(stops[1:]):
-        loc = [[last.Lng, last.Lat], [stop.Lng, stop.Lat]]
-        line = geojson.LineString(loc)
-        f = geojson.Feature(
-            geometry=line,
-            properties={
-                "fill": rainbow_colors[index],
-                "stroke": rainbow_colors[index],
-            },
+    stop_on_route = Cache.get(ROUTEVAR_STOP_MAP)[(1, 1)]
+    path_on_route = paths[(1, 1)]
+
+    stop_map = []
+
+    route = geojson.LineString(path_on_route.lng_lat_list)
+    feature = geojson.Feature(geometry=route, properties={"RouteId": 1})
+    collection = []
+    collection.append(feature)
+
+    from src.utils.helpers import calculate_distance, distance_finder
+
+    df = distance_finder((1, 1))
+    prev = stop_on_route[0]
+    stop = stops[prev]
+    stop_map.append(
+        (stop.Lng, stop.Lat),
+    )
+    total_distance = 0
+    for stop in stop_on_route[1:]:
+        stop = stops[stop]
+        stop_map.append(
+            (stop.Lng, stop.Lat),
         )
-        lines.append(f)
-        last = stop
+        dis, _ = df(prev, stop.StopId)
+        total_distance += dis
 
-    collection = geojson.FeatureCollection(lines)
+    stop_map = geojson.Feature(geometry=geojson.MultiPoint(stop_map))
+    collection.append(stop_map)
+    print(total_distance)
 
-    with open("tmp.geojson", "w") as file:
-        file.write(str(collection))
+    with open("demo/stop_map.geojson", "w") as file:
+        file.write(str(geojson.FeatureCollection(collection)))
 
 
 def test_graph2():
     Stop.load_stop()
     Path.load_path()
     g = Graph()
-    g.find_shortest_path()
-    # g.output_as_json(res)
+    # g.find_shortest_paths()
+    g.export_path(1, 7266)
+
+
+def math(a, b):
+    return a + b
 
 
 def main():
-    test_graph2()
+    test_var_stop_map()
 
 
 if __name__ == "__main__":
