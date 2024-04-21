@@ -1,9 +1,10 @@
 __all__ = ["Stop", "StopData", "StopLoader", "StopHandler"]
-
+from .RouteStop import RouteStop
 from dataclasses import dataclass
 from ..utils import json_handler
 from ..utils.constants import STOP_FILE
-from .RouteVar import RouteVarHandler
+
+from .RouteVar import Var, RouteVarHandler
 
 
 @dataclass(frozen=True)
@@ -26,9 +27,10 @@ class StopData:
     Routes: str
 
 
-class Stop:
+class Stop(RouteStop):
     def __init__(self, data: StopData):
         self.data = data
+        self._vars = {}
 
     @property
     def id(self):
@@ -42,8 +44,16 @@ class Stop:
     def data(self, value: StopData):
         self._data = value
 
-    def add_route(self, routeid):
-        self.routes = map(int, self.data.Routes.split(", "))
+    @property
+    def routes_no(self) -> list[str]:
+        return [route for route in self.data.Routes.split(", ")]
+
+    @property
+    def vars(self) -> dict[int, Var]:
+        return self._vars
+
+    def add_var(self, var: Var) -> None:
+        self.vars.update({var.id: var})
 
 
 class StopLoader:
@@ -55,11 +65,14 @@ class StopLoader:
             cls._instance.load()
         return cls._instance
 
-    def load(self) -> dict[int, Stop]:
-        if self.stop_list:
-            return self.stop_list
+    def __init__(self):
+        self._stop_list = {}
 
-        self.stop_list: dict[int, Stop] = {}  # key: StopId, value: Stop
+    @property
+    def stop_list(self) -> dict[int, Stop]:
+        return self._stop_list
+
+    def load(self) -> dict[int, Stop]:
         _route_var_handler = RouteVarHandler()
 
         def add_to_route(routeid: int, varid: int, stop: Stop) -> None:
@@ -100,7 +113,8 @@ class StopHandler:
 
     @property
     def loader(self) -> StopLoader:
-        self._loader: StopLoader = StopLoader()
+        if not self._loader:
+            self._loader: StopLoader = StopLoader()
         return self._loader
 
     def get_stop(self, id: int) -> Stop:

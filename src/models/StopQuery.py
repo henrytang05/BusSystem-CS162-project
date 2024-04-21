@@ -1,12 +1,13 @@
 __all__ = ["StopQuery"]
 import pandas as pd
+from ..utils.constants import CWD
 import csv
-from ..utils.constants import CWD, STOP_LIST, STOP_SEARCH_RESULTS
-from .Stop import Stop
-from ..utils.helpers import ensure_query_path_exists, ensure_valid_query
+import functools
+from .Stop import StopHandler, StopData, Stop
+from ..utils.helpers import ensure_query_path_exists
 from ..utils import json_handler
-from ..utils.Cache import Cache
 from typing import Any
+from .Query import Query
 
 
 class StopQuery:
@@ -47,36 +48,39 @@ class StopQuery:
 
     """
 
-    _cache = Cache()
+    _instance = None
 
     def __new__(cls):
-        """load the stop data upon the initilization of the first query"""
-        if not Cache.get(STOP_LIST):
-            Stop.load_stop()
-        return super().__new__(cls)
-
-    def __init__(self) -> None:
-        self.result = []
-        self.query = ()
+        if not cls._instance:
+            cls._instance = super().__new__(cls)
+        return cls._instance
 
     @property
-    def query(self) -> tuple:
-        return self._query
-
-    @query.setter
-    def query(self, item: tuple) -> None:
-        self._query = item
+    def stop_list(self) -> dict[int, Stop]:
+        if not self._stop_list:
+            self._stop_list: dict[int, Stop] = StopHandler().get_stops()
+        return self._stop_list
 
     @property
-    def result(self) -> list:
+    def result(self) -> list[StopData]:
         return self._result
 
     @result.setter
-    def result(self, value: list) -> None:
+    def result(self, value: list[StopData]) -> None:
         self._result = value
 
-    @ensure_valid_query(Stop)
-    def search(self, field: str, value: Any) -> list:
+    @property
+    def query(self) -> Query:
+        return self._query
+
+    @query.setter
+    def query(self, value: Query) -> None:
+        if not value.is_valid("StopData"):
+            raise ValueError(f"{value.value} is not a valid field")
+        self._query = value
+
+    @functools.lru_cache(maxsize=None)
+    def search(self, field: str, value: Any) -> list[StopData]:
         """
         Search for the stop objects that meet the query
 
@@ -89,7 +93,7 @@ class StopQuery:
             The value you want to query
 
         Raises:
-        ------
+        -----
         ValueError
             if field is not a str or doesn't exist
 
@@ -99,19 +103,20 @@ class StopQuery:
 
         """
 
-        self.query = (field, value)
-        if not Cache.get(STOP_SEARCH_RESULTS):
-            Cache.add(STOP_SEARCH_RESULTS, {})
+        self.query = Query(field, value)
 
-        if result := Cache.get(STOP_SEARCH_RESULTS).get(self.query):
-            return result
+        if field == "StopId":
+            if value not in self.stop_list.keys():
+                self.result = []
+            else:
+                self.result = [self.stop_list[value].data]
+        else:
+            self.result = [
+                stop.data
+                for stop in self.stop_list.values()
+                if getattr(stop.data, field) == value
+            ]
 
-        self.result = []
-        for _, item in Cache.get(STOP_LIST).items():
-            if getattr(item, field) == value:
-                self.result.append(item)
-
-        Cache.get(STOP_SEARCH_RESULTS)[(field, value)] = self.result
         return self.result
 
     @ensure_query_path_exists

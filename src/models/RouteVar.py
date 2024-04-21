@@ -1,7 +1,7 @@
 __all__ = ["VarData", "Var", "Route", "RouteVarLoader", "RouteVarHandler"]
 
 from dataclasses import dataclass
-from .Stop import Stop
+from .RouteStop import RouteStop
 from ..utils import json_handler
 
 # from ..utils.Cache import Cache
@@ -27,10 +27,19 @@ class VarData:
 class Var:
     def __init__(self, data: VarData):
         self.data = data
-        self.stops: dict[int, Stop] = {}
+        self.stop = {}
 
-    def add_stop(self, stop: Stop) -> None:
+    def add_stop(self, stop: RouteStop) -> None:
         self.stops.update({stop.id: stop})
+        stop.add_var(self)
+
+    @property
+    def stops(self) -> dict[int, RouteStop]:
+        return self._stops
+
+    @stops.setter
+    def stops(self, value: dict[int, RouteStop]) -> None:
+        self._stops = value
 
     @property
     def id(self) -> int:
@@ -49,11 +58,39 @@ class Var:
 class Route:
     """A data class to represent a Route object"""
 
-    def __init__(self, id: int, *vars: Var):
-        self.id = id
-        self.vars: dict[int, Var] = {}
+    def __init__(self, *vars: Var):
+        self.vars = {}
         for var in vars:
-            self.vars[var.id] = var
+            self.add_var(var)
+        # self.vars = vars
+
+    @property
+    def vars(self) -> dict[int, Var]:
+        return self._vars
+
+    @vars.setter
+    def vars(self, value: dict[int, Var]):
+        self._vars = value
+
+    # @vars.setter
+    # def vars(self, value: tuple[Var, ...] | Var):
+    #     if isinstance(value, tuple):
+    #         self._vars: dict[int, Var] = {}
+    #         for var in value:
+    #             self._vars[var.id] = var
+    #     elif isinstance(value, Var):
+    #         self._vars = {value.id: value}
+    #     else:
+    #         raise ValueError(
+    #             "Invalid input type for vars. Expected tuple[Var, ...] or Var."
+    #         )
+
+    @property
+    def id(self) -> int:
+        if self.vars:
+            return self.vars[0].data.RouteId
+        else:
+            raise ValueError("Route has no vars")
 
     def get_vars(self) -> dict[int, Var]:
         return self.vars
@@ -66,14 +103,6 @@ class Route:
         if not var:
             raise ValueError(f"Var with id {id} not found")
         return var
-
-    @property
-    def id(self) -> int:
-        return self._id
-
-    @id.setter
-    def id(self, value: int) -> None:
-        self._id = value
 
 
 class RouteVarLoader:
@@ -98,7 +127,7 @@ class RouteVarLoader:
                 continue
             id = route[0]["RouteId"]
             vars: list[Var] = [Var(VarData(**var)) for var in route]
-            self.data[id] = Route(id, *vars)
+            self.data[id] = Route(*vars)
 
         return self.data
 
@@ -111,17 +140,9 @@ class RouteVarHandler:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    @property
-    def loader(self) -> RouteVarLoader:
-        if not self._loader:
-            self._loader: RouteVarLoader = RouteVarLoader()
-        return self._loader
-
-    @property
-    def route_list(self) -> dict[int, Route]:
-        if not self._route_list:
-            self._route_list: dict[int, Route] = self.loader.load()
-        return self._route_list
+    def __init__(self) -> None:
+        self.loader: RouteVarLoader = RouteVarLoader()
+        self.route_list: dict[int, Route] = self.loader.load()
 
     def add_route(self, route: Route) -> None:
         self.route_list.update({route.id: route})
@@ -131,9 +152,6 @@ class RouteVarHandler:
             if route.id == id:
                 return route
         raise ValueError(f"Route with id {id} not found")
-
-    def load_route(self) -> dict[int, Route]:
-        return self.route_list
 
     def get_var(self, routeid: int, varid: int) -> Var:
         route: Route = self.get_route(routeid)

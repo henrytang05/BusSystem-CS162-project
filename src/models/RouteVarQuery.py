@@ -3,7 +3,7 @@ import pandas as pd
 from ..utils.constants import CWD
 import csv
 import functools
-from .RouteVar import RouteVarHandler, Var, Route
+from .RouteVar import RouteVarHandler, Route, VarData
 from ..utils.helpers import ensure_query_path_exists
 from ..utils import json_handler
 from typing import Any
@@ -57,18 +57,26 @@ class RouteVarQuery:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    @property
-    def route_var_list(self) -> dict[int, Route]:
-        if not self._route_var_list:
-            self._route_var_list: dict[int, Route] = RouteVarHandler().get_route_list()
-        return self._route_var_list
+    def __init__(self):
+        self.route_var_list = None
 
     @property
-    def result(self) -> list[Var]:
+    def route_var_list(self) -> dict[int, Route]:
+        return self._route_var_list
+
+    @route_var_list.setter
+    def route_var_list(self, value) -> None:
+        if not value:
+            self._route_var_list: dict[int, Route] = RouteVarHandler().get_route_list()
+        else:
+            self._route_var_list: dict[int, Route] = value
+
+    @property
+    def result(self) -> list[VarData]:
         return self._result
 
     @result.setter
-    def result(self, value: list[Var]) -> None:
+    def result(self, value: list[VarData]) -> None:
         self._result = value
 
     @property
@@ -77,10 +85,12 @@ class RouteVarQuery:
 
     @query.setter
     def query(self, value: Query) -> None:
+        if not value.is_valid(VarData):
+            raise ValueError(f"{value.value} is not a valid field")
         self._query = value
 
     @functools.lru_cache(maxsize=None)
-    def search(self, field: str, value: Any) -> list:
+    def search(self, field: str, value: Any) -> list[VarData]:
         """
         Search for the route var objects that meet the query
 
@@ -106,16 +116,17 @@ class RouteVarQuery:
 
         self.query = Query(field, value)
 
-        if not self.query.is_valid("VarData", field):
-            raise ValueError(f"{field} is not a valid field")
-
         if field == "RouteId":
-            self.result = list(self.route_var_list[value].get_vars().values())
+            self.result = [
+                var.data for var in self.route_var_list[value].get_vars().values()
+            ]
         else:
-            for route in self.route_var_list.values():
-                for var in route.vars.values():
-                    if getattr(var.data, field) == value:
-                        self.result.append(var)
+            self.result = [
+                var.data
+                for route in self.route_var_list.values()
+                for var in route.vars.values()
+                if getattr(var.data, field) == value
+            ]
 
         return self.result
 

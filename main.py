@@ -6,7 +6,6 @@ from src.models.Graph import Graph
 
 # from src.models.Graph import Graph
 from src.models.Path import Path
-from src.models.RouteVar import RouteVar
 from src.utils.Cache import Cache
 from src.utils.constants import ROUTEVAR_STOP_MAP, STOP_LIST, VAR_LIST
 from pyproj import Proj
@@ -55,43 +54,43 @@ def test_geojson():
         file.write(str(collection))
 
 
-def test_var_stop_map():
-    stops: list = Stop.load_stop()
-    paths = Path.load_path()
-    RouteVar.load_route_var()
-    stop_on_route = Cache.get(ROUTEVAR_STOP_MAP)[(1, 1)]
-    path_on_route = paths[(1, 1)]
-
-    stop_map = []
-
-    route = geojson.LineString(path_on_route.lng_lat_list)
-    feature = geojson.Feature(geometry=route, properties={"RouteId": 1})
-    collection = []
-    collection.append(feature)
-
-    from src.utils.helpers import calculate_distance, distance_finder
-
-    df = distance_finder((1, 1))
-    prev = stop_on_route[0]
-    stop = stops[prev]
-    stop_map.append(
-        (stop.Lng, stop.Lat),
-    )
-    total_distance = 0
-    for stop in stop_on_route[1:]:
-        stop = stops[stop]
-        stop_map.append(
-            (stop.Lng, stop.Lat),
-        )
-        dis, _ = df(prev, stop.StopId)
-        total_distance += dis
-
-    stop_map = geojson.Feature(geometry=geojson.MultiPoint(stop_map))
-    collection.append(stop_map)
-    print(total_distance)
-
-    with open("demo/stop_map.geojson", "w") as file:
-        file.write(str(geojson.FeatureCollection(collection)))
+# def test_var_stop_map():
+#     # stops: list = Stop.load_stop()
+#     paths = Path.load_path()
+#     # RouteVar.load_route_var()
+#     stop_on_route = Cache.get(ROUTEVAR_STOP_MAP)[(1, 1)]
+#     path_on_route = paths[(1, 1)]
+#
+#     stop_map = []
+#
+#     route = geojson.LineString(path_on_route.lng_lat_list)
+#     feature = geojson.Feature(geometry=route, properties={"RouteId": 1})
+#     collection = []
+#     collection.append(feature)
+#
+#     from src.utils.helpers import calculate_distance, distance_finder
+#
+#     df = distance_finder((1, 1))
+#     prev = stop_on_route[0]
+#     stop = stops[prev]
+#     stop_map.append(
+#         (stop.Lng, stop.Lat),
+#     )
+#     total_distance = 0
+#     for stop in stop_on_route[1:]:
+#         stop = stops[stop]
+#         stop_map.append(
+#             (stop.Lng, stop.Lat),
+#         )
+#         dis, _ = df(prev, stop.StopId)
+#         total_distance += dis
+#
+#     stop_map = geojson.Feature(geometry=geojson.MultiPoint(stop_map))
+#     collection.append(stop_map)
+#     print(total_distance)
+#
+#     with open("demo/stop_map.geojson", "w") as file:
+#         file.write(str(geojson.FeatureCollection(collection)))
 
 
 def test_graph2():
@@ -102,12 +101,13 @@ def test_graph2():
     g.export_path(1, 7266)
 
 
-def math(a, b):
-    return a + b
+def search_route():
+    q = RouteVarQuery()
+    q.search("RouteId", 1)
 
 
 def main():
-    test_var_stop_map()
+    search_route()
 
 
 if __name__ == "__main__":

@@ -8,3 +8,4 @@ shortest.json
 *.geojson
 output.json
 demo/
+env/
