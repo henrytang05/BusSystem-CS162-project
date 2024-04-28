@@ -1,12 +1,13 @@
 __all__ = ["PathQuery"]
 import pandas as pd
 import csv
-from .Path import Path
+import functools
+from .Path import Path, PathData
 from ..utils.constants import CWD, PATH_LIST, PATH_SEARCH_RESULTS
 from ..utils.helpers import ensure_query_path_exists, ensure_valid_query
 from ..utils import json_handler
-from ..utils.Cache import Cache
 from typing import Any
+from .Query import Query
 
 
 class PathQuery:
@@ -49,35 +50,34 @@ class PathQuery:
 
     """
 
-    _cache = Cache()
-
-    def __new__(cls):
-        """load the path data upon the initilization of the first query"""
-        if not Cache.get(PATH_LIST):
-            Path.load_path()
-        return super().__new__(cls)
-
     def __init__(self):
-        self.result = []
-        self.query = ()
+        from .Path import PathHandler
+
+        self.handler = PathHandler()
 
     @property
-    def query(self) -> tuple:
-        return self._query
-
-    @query.setter
-    def query(self, item: tuple):
-        self._query = item
+    def path_list(self) -> dict[tuple[int, int], Path]:
+        return self.handler.get_path_list()
 
     @property
-    def result(self) -> list[Path]:
+    def result(self) -> list[PathData]:
         return self._result
 
     @result.setter
-    def result(self, value: list):
+    def result(self, value: list[PathData]) -> None:
         self._result = value
 
-    @ensure_valid_query(Path)
+    @property
+    def query(self) -> Query:
+        return self._query
+
+    @query.setter
+    def query(self, value: Query) -> None:
+        if not value.is_valid(PathData):
+            raise ValueError(f"{value.value} is not a valid field")
+        self._query = value
+
+    @functools.lru_cache(maxsize=None)
     def search(self, field: str, value: Any) -> list:
         """
         Search for the path objects that meet the query

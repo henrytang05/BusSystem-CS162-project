@@ -3,11 +3,12 @@ import pandas as pd
 from ..utils.constants import CWD
 import csv
 import functools
-from .RouteVar import RouteVarHandler, Route, VarData
 from ..utils.helpers import ensure_query_path_exists
 from ..utils import json_handler
 from typing import Any
 from .Query import Query
+
+from .RouteVar import RouteVarHandler, Route, VarData, Var
 
 
 class RouteVarQuery:
@@ -43,40 +44,26 @@ class RouteVarQuery:
     -------
     ```python
     q = RouteVarQuery()
-    results = q.search(field = "RouteId", value = 1)
+    results = q.search("RouteId",1)
     print(results)
     q.output_as_json("result.json")
     ```
 
     """
 
-    _instance = None
-
-    def __new__(cls):
-        if not cls._instance:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-
     def __init__(self):
-        self.route_var_list = None
+        self.handler = RouteVarHandler()
 
     @property
     def route_var_list(self) -> dict[int, Route]:
-        return self._route_var_list
-
-    @route_var_list.setter
-    def route_var_list(self, value) -> None:
-        if not value:
-            self._route_var_list: dict[int, Route] = RouteVarHandler().get_route_list()
-        else:
-            self._route_var_list: dict[int, Route] = value
+        return self.handler.get_route_list()
 
     @property
-    def result(self) -> list[VarData]:
+    def result(self) -> list[VarData | Var]:
         return self._result
 
     @result.setter
-    def result(self, value: list[VarData]) -> None:
+    def result(self, value: list[VarData | Var]) -> None:
         self._result = value
 
     @property
@@ -90,7 +77,9 @@ class RouteVarQuery:
         self._query = value
 
     @functools.lru_cache(maxsize=None)
-    def search(self, field: str, value: Any) -> list[VarData]:
+    def search(
+        self, field: str, value: Any, full_info: bool = False
+    ) -> list[VarData | Var]:
         """
         Search for the route var objects that meet the query
 
@@ -116,17 +105,39 @@ class RouteVarQuery:
 
         self.query = Query(field, value)
 
-        if field == "RouteId":
-            self.result = [
-                var.data for var in self.route_var_list[value].get_vars().values()
-            ]
+        if full_info:
+
+            if field == "RouteId":
+                if value not in self.route_var_list.keys():
+                    self.result = []
+                else:
+                    self.result = [
+                        var for var in self.route_var_list[value].get_vars().values()
+                    ]
+            else:
+                self.result = [
+                    var
+                    for route in self.route_var_list.values()
+                    for var in route.vars.values()
+                    if getattr(var.data, field) == value
+                ]
         else:
-            self.result = [
-                var.data
-                for route in self.route_var_list.values()
-                for var in route.vars.values()
-                if getattr(var.data, field) == value
-            ]
+
+            if field == "RouteId":
+                if value not in self.route_var_list.keys():
+                    self.result = []
+                else:
+                    self.result = [
+                        var.data
+                        for var in self.route_var_list[value].get_vars().values()
+                    ]
+            else:
+                self.result = [
+                    var.data
+                    for route in self.route_var_list.values()
+                    for var in route.vars.values()
+                    if getattr(var.data, field) == value
+                ]
 
         return self.result
 

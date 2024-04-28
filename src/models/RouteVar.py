@@ -1,10 +1,15 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .Path import PathData
+    from .Stop import Stop
 __all__ = ["VarData", "Var", "Route", "RouteVarLoader", "RouteVarHandler"]
 
 from dataclasses import dataclass
-from .RouteStop import RouteStop
-from ..utils import json_handler
 
-# from ..utils.Cache import Cache
+from .PathStop import PathStop
+from ..utils import json_handler
 from ..utils.constants import VAR_FILE
 
 
@@ -25,34 +30,115 @@ class VarData:
 
 
 class Var:
+
     def __init__(self, data: VarData):
         self.data = data
-        self.stop = {}
+        self.stops: list[Stop] = []
 
-    def add_stop(self, stop: RouteStop) -> None:
-        self.stops.update({stop.id: stop})
+    def add_stop(self, stop: Stop) -> None:
+        self.stops.append(stop)
         stop.add_var(self)
-
-    @property
-    def stops(self) -> dict[int, RouteStop]:
-        return self._stops
-
-    @stops.setter
-    def stops(self, value: dict[int, RouteStop]) -> None:
-        self._stops = value
 
     @property
     def id(self) -> int:
         return self.data.RouteVarId
 
-    @property
-    def data(self):
-        """The data property."""
-        return self._data
+    def get_stops(self) -> list[Stop]:
+        return self.stops
 
-    @data.setter
-    def data(self, value):
-        self._data = value
+    def add_path(self, whole_path: PathData) -> None:
+        from pyproj import Geod
+
+        lng_lat_list: list[tuple[float, float]] = list(
+            zip(whole_path.lngs, whole_path.lats)
+        )
+        geo = Geod(ellps="WGS84")
+
+        def finder():
+
+            last_found_index = 0
+
+            def find_closest_point(tar: tuple[float, float]) -> int:
+
+                nonlocal last_found_index
+
+                found = last_found_index
+                best_dis = float("inf")
+                for i, point in enumerate(lng_lat_list[last_found_index:]):
+                    i += last_found_index
+                    lngs = (point[0], tar[0])
+                    lats = (point[1], tar[1])
+                    this = geo.line_length(lngs, lats)
+                    if this < best_dis:
+                        best_dis = this
+                        found = i
+
+                if last_found_index > found:
+                    raise ValueError("OMG what the heck")
+                if not found:
+                    raise ValueError("Something wrong when mapping into path")
+                last_found_index = found
+                return found
+
+            return find_closest_point
+
+        fd = finder()
+
+        path_stop_list: list[PathStop] = []
+        prev = self.stops[0].data
+        last_found = 0
+        velocity = self.data.Distance / (60 * self.data.RunningTime)
+        for stop in self.stops[1:]:
+            stop = stop.data
+            this_found = fd((stop.Lng, stop.Lat))
+            lngs = whole_path.lngs[last_found:this_found]
+            lats = whole_path.lats[last_found:this_found]
+            path: list[tuple[float, float]] = list(
+                zip(
+                    lngs,
+                    lats,
+                )
+            )
+            distance = geo.line_length(lngs, lats)
+            time = distance / velocity
+            path_stop_list.append(PathStop(prev, stop, distance, time, path))
+            prev = stop
+            last_found = this_found
+
+        self.path = path_stop_list
+
+    def get_path(self):
+        return self.path
+
+    def visualize_on_geojson(self, file_path: str = "path.geojson"):
+        from geojson import Point, LineString, Feature, FeatureCollection
+        import os
+
+        co = []
+        for path in self.path:
+            start = path.start
+            sid = start.StopId
+            end = path.end
+            send = end.StopId
+            road = path.path
+            start = Point((start.Lng, start.Lat))
+            end = Point((end.Lng, end.Lat))
+            road = LineString(road)
+            co.append(Feature(geometry=start, properties={"name": f"start {sid}"}))
+            co.append(Feature(geometry=end, properties={"name": f"end {send}"}))
+            co.append(
+                Feature(
+                    geometry=road,
+                    properties={"name": f"from {sid} to {send}"},
+                )
+            )
+
+        cwd = os.getcwd()
+        with open(
+            f"{cwd}/output/{file_path}{self.data.RouteId}_{self.data.RouteVarId}.geojson",
+            "w",
+        ) as file:
+            file.write(str(FeatureCollection(co)))
 
 
 class Route:
@@ -65,30 +151,9 @@ class Route:
         # self.vars = vars
 
     @property
-    def vars(self) -> dict[int, Var]:
-        return self._vars
-
-    @vars.setter
-    def vars(self, value: dict[int, Var]):
-        self._vars = value
-
-    # @vars.setter
-    # def vars(self, value: tuple[Var, ...] | Var):
-    #     if isinstance(value, tuple):
-    #         self._vars: dict[int, Var] = {}
-    #         for var in value:
-    #             self._vars[var.id] = var
-    #     elif isinstance(value, Var):
-    #         self._vars = {value.id: value}
-    #     else:
-    #         raise ValueError(
-    #             "Invalid input type for vars. Expected tuple[Var, ...] or Var."
-    #         )
-
-    @property
     def id(self) -> int:
         if self.vars:
-            return self.vars[0].data.RouteId
+            return next(iter(self.vars.items()))[1].data.RouteId
         else:
             raise ValueError("Route has no vars")
 
@@ -104,6 +169,10 @@ class Route:
             raise ValueError(f"Var with id {id} not found")
         return var
 
+    def visualize_on_geojson(self, file_path: str = "path.geojson"):
+        for var in self.vars.values():
+            var.visualize_on_geojson(file_path)
+
 
 class RouteVarLoader:
     """A class to load the route_var data from the VAR_FILE file"""
@@ -112,15 +181,19 @@ class RouteVarLoader:
 
     def __new__(cls):
         if not cls._instance:
-            cls._instance = super().__new__(cls)
+            cls._instance = super(RouteVarLoader, cls).__new__(cls)
         return cls._instance
+
+    @property
+    def data(self) -> dict[int, Route]:
+        if not hasattr(self, "_data"):
+            self._data = {}
+        return self._data
 
     def load(self) -> dict[int, Route]:
         """Load the from the VAR_FILE file and cache it"""
         if self.data:
             return self.data
-
-        self.data: dict[int, Route] = {}
 
         for route in json_handler.loader(VAR_FILE):
             if not route:
@@ -137,21 +210,24 @@ class RouteVarHandler:
 
     def __new__(cls):
         if not cls._instance:
-            cls._instance = super().__new__(cls)
+            cls._instance = super(RouteVarHandler, cls).__new__(cls)
         return cls._instance
 
-    def __init__(self) -> None:
-        self.loader: RouteVarLoader = RouteVarLoader()
-        self.route_list: dict[int, Route] = self.loader.load()
+    def __init__(self):
+        self.loader = RouteVarLoader()
+
+    @property
+    def route_list(self) -> dict[int, Route]:
+        return self.loader.load()
 
     def add_route(self, route: Route) -> None:
         self.route_list.update({route.id: route})
 
-    def get_route(self, id: int) -> Route:
+    def get_route(self, routeid: int) -> Route:
         for id, route in self.route_list.items():
-            if route.id == id:
+            if id == routeid:
                 return route
-        raise ValueError(f"Route with id {id} not found")
+        raise ValueError(f"Route with id {routeid} not found")
 
     def get_var(self, routeid: int, varid: int) -> Var:
         route: Route = self.get_route(routeid)
@@ -161,3 +237,6 @@ class RouteVarHandler:
 
     def get_route_list(self) -> dict[int, Route]:
         return self.route_list
+
+    def load(self) -> dict[int, Route]:
+        return self.loader.load()

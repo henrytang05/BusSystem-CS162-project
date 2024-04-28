@@ -1,19 +1,3 @@
-from src.models.RouteVarQuery import RouteVarQuery
-from src.models.StopQuery import StopQuery
-from src.models.Stop import Stop
-
-from src.models.Graph import Graph
-
-# from src.models.Graph import Graph
-from src.models.Path import Path
-from src.utils.Cache import Cache
-from src.utils.constants import ROUTEVAR_STOP_MAP, STOP_LIST, VAR_LIST
-from pyproj import Proj
-import geojson
-import colorsys
-import json
-
-
 def generate_rainbow_colors(num_colors):
     colors = []
     for i in range(num_colors):
@@ -102,8 +86,35 @@ def test_graph2():
 
 
 def search_route():
+    from src.models.RouteVarQuery import RouteVarQuery
+
     q = RouteVarQuery()
-    q.search("RouteId", 1)
+    q.search("RouteNo", "07")
+    q.search("RouteNo", "07")
+    q.search("RouteNo", "07")
+    q.search("RouteNo", "07")
+    q.search("RouteNo", "D2")
+    q.search("RouteNo", "07")
+    # q.output_as_csv("route.csv")
+
+    # q1 = RouteVarQuery()
+    # q1.search("RouteNo", "07")
+    # q1.output_as_csv("route.csv")
+
+    # s = StopQuery()
+    # s.search("StopId", 35)
+    # s.search("StopId", 35)
+    # s.search("StopId", 35)
+    # s.search("StopId", 35)
+    # s.search("StopId", 35)
+    # s.search("StopId", 35)
+    # # s.output_as_json("stop.json")
+    #
+    from src.models.StopQuery import StopQuery
+
+    s1 = StopQuery()
+    s1.search("StopId", 20)
+    s1.output_as_json("stop.json")
 
 
 def main():

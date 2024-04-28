@@ -48,18 +48,13 @@ class StopQuery:
 
     """
 
-    _instance = None
 
-    def __new__(cls):
-        if not cls._instance:
-            cls._instance = super().__new__(cls)
-        return cls._instance
+    def __init__(self):
+        self.handler = StopHandler()
 
     @property
     def stop_list(self) -> dict[int, Stop]:
-        if not self._stop_list:
-            self._stop_list: dict[int, Stop] = StopHandler().get_stops()
-        return self._stop_list
+        return self.handler.get_stops()
 
     @property
     def result(self) -> list[StopData]:
@@ -75,7 +70,7 @@ class StopQuery:
 
     @query.setter
     def query(self, value: Query) -> None:
-        if not value.is_valid("StopData"):
+        if not value.is_valid(StopData):
             raise ValueError(f"{value.value} is not a valid field")
         self._query = value
 
