@@ -9,3 +9,5 @@ shortest.json
 output.json
 demo/
 env/
+.venv/
+output/

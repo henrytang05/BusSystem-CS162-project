@@ -8,7 +8,7 @@ class Edge:
         dest: int,
         time: float,
         routevar: tuple[int, int],
-        path: tuple[int, int],
+        path: list[tuple[float, float]],
     ):
         self.src = src
         self.dest = dest

@@ -1,124 +1,18 @@
-def generate_rainbow_colors(num_colors):
-    colors = []
-    for i in range(num_colors):
-        hue = 360.0 * i / num_colors
-        rgb = colorsys.hsv_to_rgb(hue / 360.0, 1.0, 1.0)
-        color = "#{:02x}{:02x}{:02x}".format(
-            int(rgb[0] * 255), int(rgb[1] * 255), int(rgb[2] * 255)
-        )
-        colors.append(color)
-    return colors
+from src.models.Graph import Graph
+import time
 
 
-def test_geojson():
-    RouteVar.load_route_var()
+def graph():
 
-    paths = Cache.get(VAR_LIST)
-
-    # Generate rainbow colors
-    num_colors = len(paths)
-    rainbow_colors = generate_rainbow_colors(num_colors)
-    features = []
-    for index, path in enumerate(paths):
-        lines = geojson.LineString(path.lng_lat_list)
-        f = geojson.Feature(
-            geometry=lines,
-            properties={
-                "RouteId": path.RouteId,
-                "RouteVarId": path.RouteVarId,
-                "fill": rainbow_colors[index],
-                "stroke": rainbow_colors[index],
-            },
-        )
-        features.append(f)
-
-    collection = geojson.FeatureCollection(features)
-
-    with open("tmp.geojson", "w") as file:
-        file.write(str(collection))
-
-
-# def test_var_stop_map():
-#     # stops: list = Stop.load_stop()
-#     paths = Path.load_path()
-#     # RouteVar.load_route_var()
-#     stop_on_route = Cache.get(ROUTEVAR_STOP_MAP)[(1, 1)]
-#     path_on_route = paths[(1, 1)]
-#
-#     stop_map = []
-#
-#     route = geojson.LineString(path_on_route.lng_lat_list)
-#     feature = geojson.Feature(geometry=route, properties={"RouteId": 1})
-#     collection = []
-#     collection.append(feature)
-#
-#     from src.utils.helpers import calculate_distance, distance_finder
-#
-#     df = distance_finder((1, 1))
-#     prev = stop_on_route[0]
-#     stop = stops[prev]
-#     stop_map.append(
-#         (stop.Lng, stop.Lat),
-#     )
-#     total_distance = 0
-#     for stop in stop_on_route[1:]:
-#         stop = stops[stop]
-#         stop_map.append(
-#             (stop.Lng, stop.Lat),
-#         )
-#         dis, _ = df(prev, stop.StopId)
-#         total_distance += dis
-#
-#     stop_map = geojson.Feature(geometry=geojson.MultiPoint(stop_map))
-#     collection.append(stop_map)
-#     print(total_distance)
-#
-#     with open("demo/stop_map.geojson", "w") as file:
-#         file.write(str(geojson.FeatureCollection(collection)))
-
-
-def test_graph2():
-    Stop.load_stop()
-    Path.load_path()
     g = Graph()
-    # g.find_shortest_paths()
-    g.export_path(1, 7266)
-
-
-def search_route():
-    from src.models.RouteVarQuery import RouteVarQuery
-
-    q = RouteVarQuery()
-    q.search("RouteNo", "07")
-    q.search("RouteNo", "07")
-    q.search("RouteNo", "07")
-    q.search("RouteNo", "07")
-    q.search("RouteNo", "D2")
-    q.search("RouteNo", "07")
-    # q.output_as_csv("route.csv")
-
-    # q1 = RouteVarQuery()
-    # q1.search("RouteNo", "07")
-    # q1.output_as_csv("route.csv")
-
-    # s = StopQuery()
-    # s.search("StopId", 35)
-    # s.search("StopId", 35)
-    # s.search("StopId", 35)
-    # s.search("StopId", 35)
-    # s.search("StopId", 35)
-    # s.search("StopId", 35)
-    # # s.output_as_json("stop.json")
-    #
-    from src.models.StopQuery import StopQuery
-
-    s1 = StopQuery()
-    s1.search("StopId", 20)
-    s1.output_as_json("stop.json")
+    start = time.time()
+    g.output_result_to_csv_multiprocess()
+    end = time.time()
+    print("Total time:", end - start, "seconds")
 
 
 def main():
-    search_route()
+    graph()
 
 
 if __name__ == "__main__":

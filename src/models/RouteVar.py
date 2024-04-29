@@ -1,5 +1,8 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
+from rtree import index
+from pyproj import Geod, Proj
+from itertools import islice
 
 if TYPE_CHECKING:
     from .Path import PathData
@@ -34,20 +37,27 @@ class Var:
     def __init__(self, data: VarData):
         self.data = data
         self.stops: list[Stop] = []
+        self.path: list[PathStop] = []
 
     def add_stop(self, stop: Stop) -> None:
         self.stops.append(stop)
         stop.add_var(self)
 
     @property
-    def id(self) -> int:
+    def varid(self) -> int:
         return self.data.RouteVarId
+
+    @property
+    def routeid(self) -> int:
+        return self.data.RouteId
 
     def get_stops(self) -> list[Stop]:
         return self.stops
 
+    def get_paths(self) -> list[PathStop]:
+        return self.path
+
     def add_path(self, whole_path: PathData) -> None:
-        from pyproj import Geod
 
         lng_lat_list: list[tuple[float, float]] = list(
             zip(whole_path.lngs, whole_path.lats)
@@ -107,12 +117,71 @@ class Var:
 
         self.path = path_stop_list
 
-    def get_path(self):
-        return self.path
+    # def add_path(self, whole_path: PathData) -> None:
+    #
+    #     class Point:
+    #         def __init__(self, x: float, y: float):
+    #             self.x = x
+    #             self.y = y
+    #
+    #     lng_lat_list: list[tuple[float, float]] = list(
+    #         zip(whole_path.lngs, whole_path.lats)
+    #     )
+    #     proj = Proj("epsg:3405")
+    #     lng_lat_in_xy: list[tuple[float, float]] = [
+    #         proj(*point) for point in lng_lat_list
+    #     ]
+    #     geo = Geod(ellps="WGS84")
+    #
+    #     idx = index.Index()
+    #     xy_points = [
+    #         idx.insert(i, (*point, *point)) for i, point in enumerate(lng_lat_in_xy)
+    #     ]
+    #
+    #     path_stop_list: list[PathStop] = []
+    #     prev_stop = self.stops[0].data
+    #     last_found = 0
+    #     velocity = self.data.Distance / (60 * self.data.RunningTime)
+    #     for this_stop in self.stops[1:]:
+    #         this_stop = this_stop.data
+    #
+    #         stop_lng, stop_lat = this_stop.Lng, this_stop.Lat
+    #         xy_point = proj(stop_lng, stop_lat)
+    #         nearest_point_id = list(idx.nearest((*xy_point, *xy_point), 1))[0]
+    #         this_found = nearest_point_id
+    #         # assert this_found > last_found
+    #         if this_found < last_found:
+    #             print(
+    #                 this_found,
+    #                 last_found,
+    #                 self.routeid,
+    #                 self.varid,
+    #                 this_stop.StopId,
+    #                 prev_stop.StopId,
+    #             )
+    #         assert this_found < len(whole_path.lngs)
+    #
+    #         lngs = islice(whole_path.lngs, last_found, this_found)
+    #         lats = islice(whole_path.lats, last_found, this_found)
+    #         path: list[tuple[float, float]] = list(
+    #             zip(
+    #                 lngs,
+    #                 lats,
+    #             )
+    #         )
+    #         distance = geo.line_length(lngs, lats)
+    #         time = distance / velocity
+    #         path_stop_list.append(PathStop(prev_stop, this_stop, distance, time, path))
+    #
+    #         for j in range(last_found, this_found):
+    #             idx.delete(j, (*lng_lat_in_xy[j], *lng_lat_in_xy[j]))
+    #         prev_stop = this_stop
+    #         last_found = this_found
+    #
+    #     self.path = path_stop_list
 
-    def visualize_on_geojson(self, file_path: str = "path.geojson"):
-        from geojson import Point, LineString, Feature, FeatureCollection
-        import os
+    def convert_to_geojson(self):
+        from geojson import Point, LineString, Feature
 
         co = []
         for path in self.path:
@@ -129,23 +198,22 @@ class Var:
             co.append(
                 Feature(
                     geometry=road,
-                    properties={"name": f"from {sid} to {send}"},
+                    properties={
+                        "name": f"from {sid} to {send}",
+                        "route": self.data.RouteId,
+                        "var": self.data.RouteVarId,
+                    },
                 )
             )
 
-        cwd = os.getcwd()
-        with open(
-            f"{cwd}/output/{file_path}{self.data.RouteId}_{self.data.RouteVarId}.geojson",
-            "w",
-        ) as file:
-            file.write(str(FeatureCollection(co)))
+        return co
 
 
 class Route:
     """A data class to represent a Route object"""
 
     def __init__(self, *vars: Var):
-        self.vars = {}
+        self.vars: dict[int, Var] = {}
         for var in vars:
             self.add_var(var)
         # self.vars = vars
@@ -161,7 +229,7 @@ class Route:
         return self.vars
 
     def add_var(self, var: Var) -> None:
-        self.vars.update({var.id: var})
+        self.vars.update({var.varid: var})
 
     def get_var(self, id: int) -> Var:
         var = self.vars.get(id, None)
@@ -169,9 +237,11 @@ class Route:
             raise ValueError(f"Var with id {id} not found")
         return var
 
-    def visualize_on_geojson(self, file_path: str = "path.geojson"):
+    def convert_to_geojson(self) -> list:
+        co = []
         for var in self.vars.values():
-            var.visualize_on_geojson(file_path)
+            co += var.convert_to_geojson()
+        return co
 
 
 class RouteVarLoader:

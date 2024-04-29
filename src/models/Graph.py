@@ -1,32 +1,58 @@
 import heapq
-
-from ..utils.Cache import Cache
-from ..utils.constants import PATH_LIST, ROUTEVAR_STOP_MAP, STOP_LIST, VAR_LIST
-from ..utils.helpers import calculate_distance, distance_finder, stop_finder
+import concurrent.futures
+import time
+import os
+import csv
+from networkx import MultiDiGraph
 from .Edge import Edge
-from geojson import LineString
+from .Stop import StopHandler
+from .RouteVar import RouteVarHandler
+from .Path import PathHandler
+import pandas as pd
 
 
-class Graph:
+class Graph(MultiDiGraph):
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(Graph, cls).__new__(cls)
+
+        return cls._instance
+
     def __init__(self):
-        self.vertices: dict[int, list[Edge]] = {}
-        self.short_paths = {}
-        rtm = Cache.get(ROUTEVAR_STOP_MAP)
-        routevars = Cache.get(VAR_LIST)
-        for routevar, stops in rtm.items():
-            ave_speed = routevars[routevar].Distance / (
-                60 * routevars[routevar].RunningTime
-            )
-            prev_stop = stops[0]
-            df = distance_finder(routevar)
-            for stop in stops[1:]:
-                distance, path = df(prev_stop, stop)
-                self.add_edge(prev_stop, stop, distance / ave_speed, routevar, path)
-                prev_stop = stop
+        if not hasattr(self, "vertices") or not hasattr(self, "short_paths"):
+            self.vertices = {}
+            self.short_paths = {}
+            self.make_graph()
 
-        for stopid, _ in Cache.get(STOP_LIST).items():
-            if stopid not in self.vertices:
-                self.vertices[stopid] = []
+    def ensure_data_loaded(self):
+        self.RouteVarHandler = RouteVarHandler()
+        self.StopHandler = StopHandler()
+        self.PathHandler = PathHandler()
+
+        self.RouteVarHandler.load()
+        self.StopHandler.load()
+        self.PathHandler.load()
+
+    def make_graph(self):
+        rv = RouteVarHandler()
+        self.ensure_data_loaded()
+
+        for route in rv.get_route_list().values():
+            for var in route.vars.values():
+                path = var.get_paths()
+                for segment in path:
+                    self.add_edge(
+                        segment.start.StopId,
+                        segment.end.StopId,
+                        segment.time,
+                        (var.routeid, var.varid),
+                        segment.path,
+                    )
+        for stop in StopHandler().get_stops().keys():
+            if stop not in self.vertices:
+                self.vertices[stop] = []
 
     def add_edge(
         self,
@@ -34,17 +60,17 @@ class Graph:
         dest: int,
         time: float,
         routevar: tuple[int, int],
-        path: tuple[int, int],
+        path: list[tuple[float, float]],
     ):
         if src not in self.vertices:
             self.vertices[src] = []
         self.vertices[src].append(Edge(src, dest, time, routevar, path))
 
-    def Dijkstra(self, start: int, target=None) -> tuple[dict, dict[int, list[Edge]]]:
+    def Dijkstra(self, start: int, target=None) -> tuple[dict, dict]:
         cost = {node: float("inf") for node in self.vertices}
         cost[start] = 0
         visited = set()
-        path = {node: [] for node in self.vertices}
+        prev = {node: -1 for node in self.vertices}
         path_count = {node: 0 for node in self.vertices}
         path_count[start] = 1
 
@@ -52,7 +78,7 @@ class Graph:
         while pq:
             current_cost, current_node = heapq.heappop(pq)
             if current_node == target:
-                return cost, path
+                return cost, prev
             if cost[current_node] < current_cost:
                 continue
             visited.add(current_node)
@@ -64,50 +90,101 @@ class Graph:
                     cost[edge.dest] = new_cost
                     path_count[edge.dest] = path_count[current_node]
                     heapq.heappush(pq, (new_cost, edge.dest))
-                    path[edge.dest].append(edge)
+                    prev.update({edge.dest: current_node})
                 elif new_cost == cost[edge.dest]:
                     path_count[edge.dest] += path_count[current_node]
-        return (cost, path)
+        return (cost, prev)
 
-    def find_shortest_paths(self):
-        stops = Cache.get(STOP_LIST)
-        results = {}
-        for stop in stops:
-            cost, path = self.Dijkstra(stop)
-            results[stop] = (cost, path)
-            # self.output_as_json(cost)
-            # del res
-        self.short_paths = results
-        return results
+    def output_result_to_csv(self):
+        io_time = 0
 
-    def export_path(self, start: int, end: int):
-        cost, path1 = self.Dijkstra(start, end)
-        self.short_paths[start] = (cost, path1)
-        time = self.short_paths[start][0][end]
-        path = self.short_paths[start][1][end]
+        for result in self.find_shortest_paths():
 
-        if time == float("inf"):
-            raise ValueError("There is no path")
-        paths = Cache.get(PATH_LIST)
-        line = []
+            start = time.time()
+            src = result[0]
+            cost = result[1]
+            path = result[2]
+            data = [
+                (src, des, time, self.backtrack_path(path, des))
+                for des, time in cost.items()
+            ]
 
-        for edge in path:
-            line += paths[edge.routevar].lng_lat_list[edge.path[0] : edge.path[1]]
+            import os
+            import csv
 
-        linestring = LineString(line)
-        print(f"From {start} to {end} takes {time}")
+            df = pd.DataFrame(data, columns=["src", "des", "time", "path"])
+            CWD = os.getcwd()
+            df.to_csv(
+                f"{CWD}/output/shortest_path/{src}.csv",
+                index=False,
+                quoting=csv.QUOTE_NONNUMERIC,
+                encoding="utf-8",
+                mode="a",
+            )
+            end = time.time()
+            io_time += end - start
 
-        with open(f"shortest_paths/{start}_to_{end}.geojson", "w") as f:
-            f.write(str(linestring))
+        print("Total I/O time:", io_time, "seconds")
 
-    def output_as_json(self, result):
-        import json
+    def output_result_to_csv_multiprocess(self):
+        sh = StopHandler().get_stops()
 
-        with open("output.geojson", "a") as f:
-            f.write(json.dumps(result, indent=4))
-            f.write("\n")
+        stops = [stop for stop in sh]
+        with concurrent.futures.ProcessPoolExecutor() as executor:
+            executor.map(wrapped, stops)
+            # for result in results:
+            #     src = result[0]
+            #     cost = result[1]
+            #     path = result[2]
+            #     data = [
+            #         (src, des, time, backtrack_path(path, des))
+            #         for des, time in cost.items()
+            #     ]
+            #     df = pd.DataFrame(data, columns=["src", "des", "time", "path"])
+            #     CWD = os.getcwd()
+            #     df.to_csv(
+            #         f"{CWD}/output/shortest_path/{src}.csv",
+            #         index=False,
+            #         quoting=csv.QUOTE_NONNUMERIC,
+            #         encoding="utf-8",
+            #         mode="a",
+            #     )
 
-    def print_results(self, results: list):
-        for result in results:
-            for src, (des, time) in result.items():
-                print(f"From {src} to {des} {time} seconds")
+
+def backtrack_path(path: dict, target: int) -> list:
+    result = []
+    if path[target] == -1:
+        return result
+    while target != -1:
+        result.append(target)
+        target = path[target]
+    result.reverse()
+
+    return result
+
+
+# def find_shortest_path_from():
+graph = Graph()
+
+
+def wrapped(src: int):
+    global graph
+    start = time.time()
+    cost, path = graph.Dijkstra(src)
+    end = time.time()
+    print("From", src, ":", end - start, "seconds")
+    output_to_csv(src, cost, path)
+    # return (src, cost, path)
+
+
+def output_to_csv(src, cost, path):
+    data = [(src, des, time, backtrack_path(path, des)) for des, time in cost.items()]
+    df = pd.DataFrame(data, columns=["src", "des", "time", "path"])
+    CWD = os.getcwd()
+    df.to_csv(
+        f"{CWD}/output/shortest_path/{src}.csv",
+        index=False,
+        quoting=csv.QUOTE_NONNUMERIC,
+        encoding="utf-8",
+        mode="a",
+    )

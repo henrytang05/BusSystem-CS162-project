@@ -48,7 +48,7 @@ class Stop:
         return self._vars
 
     def add_var(self, var: Var) -> None:
-        self.vars.update({var.id: var})
+        self.vars.update({var.varid: var})
 
 
 class StopLoader:
