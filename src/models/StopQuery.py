@@ -4,7 +4,7 @@ from ..utils.constants import CWD
 import csv
 import functools
 from .Stop import StopHandler, StopData, Stop
-from ..utils.helpers import ensure_query_path_exists
+from ..utils.helpers import ensure_path_exists
 from ..utils import json_handler
 from typing import Any
 from .Query import Query
@@ -47,7 +47,6 @@ class StopQuery:
     ```
 
     """
-
 
     def __init__(self):
         self.handler = StopHandler()
@@ -114,7 +113,7 @@ class StopQuery:
 
         return self.result
 
-    @ensure_query_path_exists
+    @ensure_path_exists("query")
     def output_as_csv(self, filename: str = "result.csv") -> None:
         """Query result is store in the {CWD}/query/ directory"""
         if not self.result:
@@ -129,7 +128,7 @@ class StopQuery:
             encoding="utf-8",
         )
 
-    @ensure_query_path_exists
+    @ensure_path_exists("query")
     def output_as_json(self, filename: str = "result.json") -> None:
         """Query result is store in the {CWD}/query/ directory"""
         json_handler.writer(f"{CWD}/query/{filename}", self.result)

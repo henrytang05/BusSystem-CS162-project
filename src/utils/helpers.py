@@ -1,6 +1,7 @@
 __all__ = [
+    "timeit",
     "ensure_valid_query",
-    "ensure_query_path_exists",
+    "ensure_path_exists",
     "intersection",
     "calculate_distance",
     "visualize",
@@ -12,6 +13,23 @@ from .Cache import Cache
 
 
 CWD = os.getcwd()
+
+
+def timeit(func):
+    import time
+
+    count = 0
+
+    def wrapper(*args, **kwargs):
+        nonlocal count
+        start = time.perf_counter()
+        result = func(*args, **kwargs)
+        end = time.perf_counter()
+        count += 1
+        print(count, ":Total time:", end - start, "seconds")
+        return result
+
+    return wrapper
 
 
 def visualize(features_collection: list, file_path: str = "path.geojson") -> None:
@@ -80,12 +98,19 @@ def ensure_valid_query(class_name):
     return decorator_function
 
 
-def ensure_query_path_exists(func):
-    """Ensure the path for query exists before writing the file"""
+def ensure_path_exists(path: str):
+    def wrapped(func):
+        """Ensure the path for query exists before writing the file"""
 
-    def make_directory(*argc, **kwargs):
-        if not os.path.exists(f"{CWD}/query"):
-            os.mkdir(f"{CWD}/query")
-        return func(*argc, **kwargs)
+        def make_directory(*args, **kwargs):
+            nonlocal path
+            path = kwargs.get("path", os.getcwd())
+            try:
+                os.makedirs(os.path.join(os.getcwd(), path), exist_ok=True)
+            except OSError as e:
+                print(f"Error creating directory: {e}")
+            return func(*args, **kwargs)
 
-    return make_directory
+        return make_directory
+
+    return wrapped

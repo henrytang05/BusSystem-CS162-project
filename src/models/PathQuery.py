@@ -4,7 +4,7 @@ import csv
 import functools
 from .Path import Path, PathData
 from ..utils.constants import CWD, PATH_LIST, PATH_SEARCH_RESULTS
-from ..utils.helpers import ensure_query_path_exists, ensure_valid_query
+from ..utils.helpers import ensure_path_exists, ensure_valid_query
 from ..utils import json_handler
 from typing import Any
 from .Query import Query
@@ -132,7 +132,7 @@ class PathQuery:
         Cache.get(PATH_SEARCH_RESULTS)[(field, value)] = self.result
         return self.result
 
-    @ensure_query_path_exists
+    @ensure_path_exists("query")
     def output_as_csv(self, filename: str = "result.csv"):
         """Query result is store in the {CWD}/query/ directory"""
         if not self.result:
@@ -147,7 +147,7 @@ class PathQuery:
             encoding="utf-8",
         )
 
-    @ensure_query_path_exists
+    @ensure_path_exists
     def output_as_json(self, filename: str = "result.json"):
         """Query result is store in the {CWD}/query/ directory"""
         json_handler.writer(f"{CWD}/query/{filename}", self.result)
