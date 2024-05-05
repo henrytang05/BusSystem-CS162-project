@@ -76,7 +76,6 @@ class RouteVarQuery:
             raise ValueError(f"{value.value} is not a valid field")
         self._query = value
 
-    @functools.lru_cache(maxsize=None)
     def search(
         self, field: str, value: Any, full_info: bool = False
     ) -> list[VarData | Var]:
@@ -105,39 +104,30 @@ class RouteVarQuery:
 
         self.query = Query(field, value)
 
-        if full_info:
-
-            if field == "RouteId":
-                if value not in self.route_var_list.keys():
-                    self.result = []
-                else:
-                    self.result = [
-                        var for var in self.route_var_list[value].get_vars().values()
-                    ]
-            else:
-                self.result = [
-                    var
-                    for route in self.route_var_list.values()
-                    for var in route.vars.values()
-                    if getattr(var.data, field) == value
-                ]
-        else:
-
-            if field == "RouteId":
-                if value not in self.route_var_list.keys():
-                    self.result = []
-                else:
-                    self.result = [
-                        var.data
-                        for var in self.route_var_list[value].get_vars().values()
-                    ]
+        if field == "RouteId":
+            if self.query.value not in self.route_var_list.keys():
+                self.result = []
             else:
                 self.result = [
                     var.data
-                    for route in self.route_var_list.values()
-                    for var in route.vars.values()
-                    if getattr(var.data, field) == value
+                    for var in self.route_var_list[self.query.value].get_vars().values()
                 ]
+        else:
+            self.result = [
+                var.data
+                for route in self.route_var_list.values()
+                for var in route.vars.values()
+                if getattr(var.data, field) == self.query.value
+            ]
+            for route in self.route_var_list.values():
+                for var in route.vars.values():
+                    cv = getattr(var.data, field)
+                    if isinstance(cv, str):
+                        if cv.lower() == self.query.value.lower():
+                            self.result.append(var.data)
+                    else:
+                        if cv == self.query.value:
+                            self.result.append(var.data)
 
         return self.result
 

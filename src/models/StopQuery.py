@@ -50,6 +50,7 @@ class StopQuery:
 
     def __init__(self):
         self.handler = StopHandler()
+        self.result = []
 
     @property
     def stop_list(self) -> dict[int, Stop]:
@@ -73,44 +74,26 @@ class StopQuery:
             raise ValueError(f"{value.value} is not a valid field")
         self._query = value
 
-    @functools.lru_cache(maxsize=None)
-    def search(self, field: str, value: Any) -> list[StopData]:
-        """
-        Search for the stop objects that meet the query
-
-        Parameters:
-        ----------
-        field : str
-            The field you want to query
-
-        value: any
-            The value you want to query
-
-        Raises:
-        -----
-        ValueError
-            if field is not a str or doesn't exist
-
-        Return:
-        -------
-            list of Stop objects
-
-        """
+    # @functools.lru_cache(maxsize=None)
+    def search(self, field: str, value) -> list[StopData]:
 
         self.query = Query(field, value)
 
         if field == "StopId":
-            if value not in self.stop_list.keys():
+            if self.query.value not in self.stop_list.keys():
                 self.result = []
             else:
-                self.result = [self.stop_list[value].data]
+                self.result = [self.stop_list[self.query.value].data]
         else:
-            self.result = [
-                stop.data
-                for stop in self.stop_list.values()
-                if getattr(stop.data, field) == value
-            ]
-
+            for stop in self.stop_list:
+                cv = getattr(self.stop_list[stop].data, self.query.field)
+                if isinstance(cv, str):
+                    assert isinstance(self.query.value, str)
+                    if cv.lower() == self.query.value.lower():
+                        self.result.append(self.stop_list[stop].data)
+                else:
+                    if cv == self.query.value:
+                        self.result.append(self.stop_list[stop].data)
         return self.result
 
     @ensure_path_exists("query")
