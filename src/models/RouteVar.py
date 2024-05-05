@@ -1,4 +1,7 @@
 from __future__ import annotations
+
+from ..utils.helpers import timeit
+from geojson import Point, LineString, Feature
 from typing import TYPE_CHECKING
 from rtree import index
 from pyproj import Geod, Proj
@@ -64,45 +67,52 @@ class Var:
         )
         geo = Geod(ellps="WGS84")
 
-        def finder():
+        def bestfit_index_finder():
 
             last_found_index = 0
 
-            def find_closest_point(tar: tuple[float, float]) -> int:
+            def find_closest_point(target: tuple[float, float]) -> int:
 
                 nonlocal last_found_index
-
-                found = last_found_index
+                start_iter = (
+                    min(last_found_index + 1, len(lng_lat_list) - 1)
+                    if last_found_index
+                    else 0
+                )
+                found = start_iter
                 best_dis = float("inf")
-                for i, point in enumerate(lng_lat_list[last_found_index:]):
-                    i += last_found_index
-                    lngs = (point[0], tar[0])
-                    lats = (point[1], tar[1])
-                    this = geo.line_length(lngs, lats)
-                    if this < best_dis:
-                        best_dis = this
+                for i, point in enumerate(lng_lat_list[start_iter:], start_iter):
+                    lngs = (point[0], target[0])
+                    lats = (point[1], target[1])
+                    this_len = geo.line_length(lngs, lats)
+                    if this_len < best_dis:
+                        best_dis = this_len
                         found = i
 
-                if last_found_index > found:
-                    raise ValueError("OMG what the heck")
-                if not found:
-                    raise ValueError("Something wrong when mapping into path")
                 last_found_index = found
                 return found
 
             return find_closest_point
 
-        fd = finder()
+        fd = bestfit_index_finder()
 
         path_stop_list: list[PathStop] = []
-        prev = self.stops[0].data
+        assert len(self.stops) > 1
+        prev_stop = self.stops[0]
         last_found = 0
         velocity = self.data.Distance / (60 * self.data.RunningTime)
-        for stop in self.stops[1:]:
-            stop = stop.data
-            this_found = fd((stop.Lng, stop.Lat))
-            lngs = whole_path.lngs[last_found:this_found]
-            lats = whole_path.lats[last_found:this_found]
+        for current_stop in self.stops[1:]:
+            prev_stop_data = prev_stop.data
+            current_stop_data = current_stop.data
+            this_found = fd((current_stop_data.Lng, current_stop_data.Lat))
+            assert this_found >= last_found
+            assert this_found >= 0 and last_found >= 0
+            assert (
+                this_found <= len(lng_lat_list) - 1
+                and last_found <= len(lng_lat_list) - 1
+            )
+            lngs = whole_path.lngs[last_found : this_found + 1]
+            lats = whole_path.lats[last_found : this_found + 1]
             path: list[tuple[float, float]] = list(
                 zip(
                     lngs,
@@ -111,100 +121,21 @@ class Var:
             )
             distance = geo.line_length(lngs, lats)
             time = distance / velocity
-            path_stop_list.append(PathStop(prev, stop, distance, time, path))
-            prev = stop
+            path_stop_list.append(
+                PathStop(prev_stop, current_stop, distance, time, path)
+            )
+            prev_stop = current_stop
             last_found = this_found
-
         self.path = path_stop_list
 
-    # def add_path(self, whole_path: PathData) -> None:
-    #
-    #     class Point:
-    #         def __init__(self, x: float, y: float):
-    #             self.x = x
-    #             self.y = y
-    #
-    #     lng_lat_list: list[tuple[float, float]] = list(
-    #         zip(whole_path.lngs, whole_path.lats)
-    #     )
-    #     proj = Proj("epsg:3405")
-    #     lng_lat_in_xy: list[tuple[float, float]] = [
-    #         proj(*point) for point in lng_lat_list
-    #     ]
-    #     geo = Geod(ellps="WGS84")
-    #
-    #     idx = index.Index()
-    #     xy_points = [
-    #         idx.insert(i, (*point, *point)) for i, point in enumerate(lng_lat_in_xy)
-    #     ]
-    #
-    #     path_stop_list: list[PathStop] = []
-    #     prev_stop = self.stops[0].data
-    #     last_found = 0
-    #     velocity = self.data.Distance / (60 * self.data.RunningTime)
-    #     for this_stop in self.stops[1:]:
-    #         this_stop = this_stop.data
-    #
-    #         stop_lng, stop_lat = this_stop.Lng, this_stop.Lat
-    #         xy_point = proj(stop_lng, stop_lat)
-    #         nearest_point_id = list(idx.nearest((*xy_point, *xy_point), 1))[0]
-    #         this_found = nearest_point_id
-    #         # assert this_found > last_found
-    #         if this_found < last_found:
-    #             print(
-    #                 this_found,
-    #                 last_found,
-    #                 self.routeid,
-    #                 self.varid,
-    #                 this_stop.StopId,
-    #                 prev_stop.StopId,
-    #             )
-    #         assert this_found < len(whole_path.lngs)
-    #
-    #         lngs = islice(whole_path.lngs, last_found, this_found)
-    #         lats = islice(whole_path.lats, last_found, this_found)
-    #         path: list[tuple[float, float]] = list(
-    #             zip(
-    #                 lngs,
-    #                 lats,
-    #             )
-    #         )
-    #         distance = geo.line_length(lngs, lats)
-    #         time = distance / velocity
-    #         path_stop_list.append(PathStop(prev_stop, this_stop, distance, time, path))
-    #
-    #         for j in range(last_found, this_found):
-    #             idx.delete(j, (*lng_lat_in_xy[j], *lng_lat_in_xy[j]))
-    #         prev_stop = this_stop
-    #         last_found = this_found
-    #
-    #     self.path = path_stop_list
-
-    def convert_to_geojson(self):
-        from geojson import Point, LineString, Feature
+    def convert_to_geojson(self) -> list[Feature]:
 
         co = []
         for path in self.path:
-            start = path.start
-            sid = start.StopId
-            end = path.end
-            send = end.StopId
-            road = path.path
-            start = Point((start.Lng, start.Lat))
-            end = Point((end.Lng, end.Lat))
-            road = LineString(road)
-            co.append(Feature(geometry=start, properties={"name": f"start {sid}"}))
-            co.append(Feature(geometry=end, properties={"name": f"end {send}"}))
-            co.append(
-                Feature(
-                    geometry=road,
-                    properties={
-                        "name": f"from {sid} to {send}",
-                        "route": self.data.RouteId,
-                        "var": self.data.RouteVarId,
-                    },
-                )
-            )
+            # start = path.start.convert_to_geojson()
+            # end = path.end.convert_to_geojson()
+            road = Feature(geometry=LineString(path.path))
+            co += [road]
 
         return co
 
@@ -237,7 +168,7 @@ class Route:
             raise ValueError(f"Var with id {id} not found")
         return var
 
-    def convert_to_geojson(self) -> list:
+    def convert_to_geojson(self) -> list[Feature]:
         co = []
         for var in self.vars.values():
             co += var.convert_to_geojson()
@@ -307,6 +238,12 @@ class RouteVarHandler:
 
     def get_route_list(self) -> dict[int, Route]:
         return self.route_list
+
+    def get_var_list(self) -> dict[int, Var]:
+        var_list = {}
+        for route in self.route_list.values():
+            var_list.update(route.get_vars())
+        return var_list
 
     def load(self) -> dict[int, Route]:
         return self.loader.load()

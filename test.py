@@ -1,29 +1,35 @@
 import pandas as pd
 import ast
 from shapely.geometry import LineString, mapping
-from geojson import Feature, FeatureCollection
+from geojson import Feature, FeatureCollection, Point
+import json
+from src.models.RouteVar import RouteVarHandler
+from src.models.Path import PathHandler
+from src.models.Graph import Graph
+from src.models.Stop import StopHandler
 
 
-def export_geojson(start=210, end=439):
-    dtype = {"src": "int32", "des": "int32", "time": "float128", "path": "str"}
-    df = pd.read_csv(f"output/shortest_path/{start}.csv", dtype=dtype)
-    filtered_df = df[df["des"] == end]
+def stop():
 
-    # Extract the path value from the Series and convert it to a list of tuples
-    path_value = filtered_df["path"].iloc[0]
-    path_list = ast.literal_eval(path_value)
+    w = StopHandler().load()
+    r = RouteVarHandler()
+    p = PathHandler().load()
+    rse = r.get_var(85, 2)
+    co = rse.convert_to_geojson()
+    with open("output/route.geojson", "w") as file:
+        file.write(str(FeatureCollection(co)))
 
-    # Now you can work with the list of tuples representing coordinates
+def export_geojson(start=2028, end=7208):
+    graph = Graph()
+    co, co_var = graph.Dijkstra(start, end).convert_to_geojson()
+    with open("output/route.geojson", "w") as file:
+        file.write(str(FeatureCollection(co)))
+    with open("output/route_var.geojson", "w") as file:
+        file.write(str(FeatureCollection(co_var)))
 
-    line = LineString(path_list)
-    feature = Feature(geometry=mapping(line))
-    features_collection = []
-    features_collection.append(feature)
-    #
-    with open("output/path1.geojson", "w") as file:
-        file.write(str(FeatureCollection(features_collection)))
+def find_a
+def main():
+    export_geojson()
 
 
-#
-#
-export_geojson()
+main()

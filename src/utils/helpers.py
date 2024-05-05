@@ -4,7 +4,6 @@ __all__ = [
     "ensure_path_exists",
     "intersection",
     "calculate_distance",
-    "visualize",
 ]
 import os
 from pyproj import Geod
@@ -19,26 +18,24 @@ def timeit(func):
     import time
 
     count = 0
+    cache = {}
 
     def wrapper(*args, **kwargs):
         nonlocal count
+        nonlocal cache
         start = time.perf_counter()
         result = func(*args, **kwargs)
         end = time.perf_counter()
         count += 1
-        print(count, ":Total time:", end - start, "seconds")
+        cache[func.__name__] = (
+            1 if cache.get(func.__name__) is None else cache[func.__name__] + 1
+        )
+        print(
+            func.__name__, cache[func.__name__], ":Total time:", end - start, "seconds"
+        )
         return result
 
     return wrapper
-
-
-def visualize(features_collection: list, file_path: str = "path.geojson") -> None:
-    from geojson import FeatureCollection
-    import os
-
-    cwd = os.getcwd()
-    with open(f"{cwd}/output/{file_path}", "w") as file:
-        file.write(str(FeatureCollection(features_collection)))
 
 
 def calculate_distance(loc1: tuple[float, float], loc2: tuple[float, float]) -> float:

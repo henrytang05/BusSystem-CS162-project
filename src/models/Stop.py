@@ -1,6 +1,9 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 
+from ..utils.helpers import timeit
+from geojson import Feature, Point
+
 if TYPE_CHECKING:
     from .RouteVar import Var
 __all__ = ["Stop", "StopData", "StopLoader", "StopHandler"]
@@ -49,6 +52,17 @@ class Stop:
 
     def add_var(self, var: Var) -> None:
         self.vars.update({var.varid: var})
+
+    def convert_to_geojson(self) -> Feature:
+
+        return Feature(
+            geometry=Point((self.data.Lng, self.data.Lat)),
+            properties={
+                "StopID": self.data.StopId,
+                "marker-color": "#986a44",
+                "marker-symbol": "bus",
+            },
+        )
 
 
 class StopLoader:

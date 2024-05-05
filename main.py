@@ -1,25 +1,26 @@
-import time
-import asyncio
-from concurrent.futures import ProcessPoolExecutor
-
-from src.models.Graph import Graph, output_to_csv
+from src.models.Graph import Graph
 
 
-def graph():
+def output_all_pairs_Dijkstra():
+
     g = Graph()
-    start = time.time()
-    num_processes = 7  # Specify the number of processes here
-    with ProcessPoolExecutor(max_workers=num_processes) as executor:
-        for res in g.Dijkstra_all_pairs():
-            res = tuple(res)
-            executor.submit(output_to_csv, res)
+    g.Dijkstra_all_pairs_and_record_csv()
 
-    end = time.time()
-    print("Total time:", end - start, "seconds")
+
+def get_top_k_stop():
+    g = Graph()
+    import time
+
+    st = time.perf_counter()
+    for res in g.Dijkstra_all_pairs():
+        pass
+    et = time.perf_counter()
+    print(f"Dijkstra all pairs time: {et-st}")
+    g.get_top_k_important_stops()
 
 
 def main():
-    graph()
+    get_top_k_stop()
 
 
 if __name__ == "__main__":

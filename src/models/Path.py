@@ -1,5 +1,6 @@
 __all__ = ["Path"]
 
+from geojson import LineString, Feature
 from dataclasses import dataclass
 from ..utils import json_handler
 from ..utils.constants import PATH_FILE
@@ -25,6 +26,10 @@ class Path:
     @property
     def lng_lat_list(self) -> list[tuple[float, float]]:
         return list(zip(self.data.lngs, self.data.lats))
+
+    def convert_to_geojson(self) -> list[Feature]:
+        line = LineString(self.lng_lat_list)
+        return [Feature(geometry=line)]
 
 
 class PathLoader:
@@ -85,5 +90,5 @@ class PathHandler:
     def get_path_list(self) -> dict[tuple[int, int], Path]:
         return self.path_list
 
-    def get_path_of_route_var(self, route: int, var: int) -> Path:
+    def get_path_of_var(self, route: int, var: int) -> Path:
         return self.path_list[(route, var)]
